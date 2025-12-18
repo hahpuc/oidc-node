@@ -1,0 +1,12 @@
+{
+    "name": "getting-started-with-oidc-provider",
+    "main": "index.js",
+    "type": "module",
+    "dependencies": {
+        "bcrypt": "^6.0.0",
+        "cors": "^2.8.5",
+        "express": "^5.2.1",
+        "mysql2": "^3.16.0",
+        "oidc-provider": "^9.6.0"
+    }
+}
