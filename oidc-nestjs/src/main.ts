@@ -2,7 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
 import { ConfigService } from "@nestjs/config";
-import { Provider } from "oidc-provider";
+import { ClientMetadata, Configuration, Provider } from "oidc-provider";
 import { DataSource } from "typeorm";
 import { OidcAdapter } from "./adapters/oidc.adapter";
 import { Application, Token, Authorization } from "./entities";
@@ -36,7 +36,7 @@ async function bootstrap() {
     where: { is_deleted: false },
   });
 
-  const clients = applications.map((app) => ({
+  const clients: ClientMetadata[] = applications.map((app) => ({
     client_id: app.client_id,
     client_secret: app.client_secret || undefined,
     client_type: app.client_type,
@@ -48,19 +48,33 @@ async function bootstrap() {
     response_types: app.permissions
       ?.filter((p) => p.startsWith("gt:"))
       .includes("gt:authorization_code")
-      ? ["code"]
+      ? ["code" as any] // Cast to ResponseType
       : [],
     redirect_uris: app.redirect_uris || [],
     post_logout_redirect_uris: app.post_logout_redirect_uris || [],
     token_endpoint_auth_method:
       app.client_type === "public" ? "none" : "client_secret_basic",
-    application_type: app.application_type || "web",
+    application_type: (app.application_type as "web" | "native") || "web",
+    // Extract scopes from permissions (scp:openid, scp:profile, etc.)
+    scope: app.permissions
+      ? app.permissions
+          .filter((p) => p.startsWith("scp:"))
+          .map((p) => p.replace("scp:", ""))
+          .join(" ")
+      : "openid",
   }));
 
+  console.log("🚀 Starting OIDC Provider... ", clients);
   console.log("📦 Loaded clients from database:", clients.length);
+  console.log("🔍 Client configurations:");
+  clients.forEach((client) => {
+    console.log(`  - ${client.client_id}:`);
+    console.log(`    Grant types: ${(client.grant_types ?? []).join(", ")}`);
+    console.log(`    Scope: ${client.scope || "none"}`);
+  });
 
   // Configure OIDC Provider
-  const oidcConfig = {
+  const oidcConfig: Configuration = {
     adapter: (name: string) => oidcAdapter.createAdapter(name),
     clients: clients,
     cookies: {
@@ -149,6 +163,37 @@ async function bootstrap() {
         // Only enable this if you need to issue tokens for specific APIs
       },
     },
+    // Configure refresh token issuance policy
+    issueRefreshToken: async (ctx, client, code) => {
+      console.log("🔄 issueRefreshToken called:");
+      console.log("  - Client ID:", client.clientId);
+      console.log(
+        "  - Client allows refresh_token grant?",
+        client.grantTypeAllowed("refresh_token")
+      );
+      console.log("  - Code scopes:", Array.from(code.scopes || []));
+      console.log("  - Has offline_access?", code.scopes.has("offline_access"));
+
+      // See the Docs: => That will be have refresh token
+      const shouldIssue =
+        code.scopes.has("offline_access") ||
+        (client.applicationType === "web" &&
+          client.clientAuthMethod === "none");
+
+      if (!client.grantTypeAllowed("refresh_token")) {
+        return false;
+      }
+
+      return shouldIssue;
+    },
+    rotateRefreshToken: true,
+    ttl: {
+      AccessToken: 3600, // 1 hour
+      RefreshToken: 86400 * 14, // 14 days
+      IdToken: 3600, // 1 hour
+      AuthorizationCode: 600, // 10 minutes
+    },
+    scopes: ["openid", "profile", "email", "offline_access"],
     claims: {
       profile: [
         "birthdate",
@@ -167,9 +212,10 @@ async function bootstrap() {
         "zoneinfo",
       ],
       email: ["email", "email_verified"],
+      // offline_access doesn't return claims, it's just for refresh token
+      offline_access: [],
     },
     pkce: {
-      methods: ["S256"],
       required: (ctx, client) => {
         return client.token_endpoint_auth_method === "none";
       },
@@ -224,6 +270,11 @@ async function bootstrap() {
   provider.on("access_token.destroyed", () => {
     console.log("🗑️ Access token destroyed");
   });
+  provider.on("authorization.accepted", (ctx) => {
+    console.log("✅ Authorization accepted");
+    console.log("   Params scope:", ctx.oidc.params?.scope);
+    console.log("   Prompt details:", ctx.oidc.prompts);
+  });
 
   // Store provider in app locals for controllers
   app.use((req, res, next) => {
@@ -268,9 +319,6 @@ async function bootstrap() {
       };
     }
 
-    // Wrap provider callback to catch errors
-    const providerCallback = provider.callback();
-
     // Add finish listener to see when response completes
     res.on("finish", () => {
       if (req.path === "/me") {
@@ -278,18 +326,9 @@ async function bootstrap() {
       }
     });
 
-    try {
-      return providerCallback(req, res, (err) => {
-        if (err) {
-          console.error("❌ Provider callback error:", err);
-          console.error("❌ Error stack:", err.stack);
-        }
-        next(err);
-      });
-    } catch (error) {
-      console.error("❌ Synchronous provider error:", error);
-      next(error);
-    }
+    // Use provider callback - wraps the Koa middleware for Express
+    const callback = provider.callback();
+    return callback(req, res);
   });
 
   const port = configService.get<number>("PORT", 3000);

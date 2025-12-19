@@ -19,7 +19,7 @@ export const typeOrmConfig: DataSourceOptions = {
   entities: [Application, Authorization, Scope, Token, User],
   migrations: [join(__dirname, "../database/migrations/*{.ts,.js}")],
   synchronize: false,
-  logging: process.env.NODE_ENV === "development",
+  logging: false,
   charset: "utf8mb4",
   timezone: "Z",
 };

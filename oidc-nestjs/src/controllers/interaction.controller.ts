@@ -192,13 +192,22 @@ export class InteractionController {
         clientId: params.client_id as string,
       });
 
+      console.log("📋 Consent details:", JSON.stringify(details, null, 2));
+      console.log("🔑 Requested scope:", params.scope);
+
       if (details.missingOIDCScope) {
+        console.log("➕ Adding OIDC scopes:", details.missingOIDCScope);
         grant.addOIDCScope((details.missingOIDCScope as string[]).join(" "));
       }
       if (details.missingOIDCClaims) {
+        console.log("➕ Adding OIDC claims:", details.missingOIDCClaims);
         grant.addOIDCClaims(details.missingOIDCClaims as string[]);
       }
       if (details.missingResourceScopes) {
+        console.log(
+          "➕ Adding resource scopes:",
+          details.missingResourceScopes
+        );
         for (const [indicator, scopes] of Object.entries(
           details.missingResourceScopes
         )) {
@@ -207,6 +216,7 @@ export class InteractionController {
       }
 
       const grantId = await grant.save();
+      console.log("✅ Grant saved with ID:", grantId);
 
       const result = { consent: { grantId } };
       await provider.interactionFinished(req, res, result, {

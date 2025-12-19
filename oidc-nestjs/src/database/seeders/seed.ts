@@ -86,6 +86,7 @@ const seedData = async () => {
           "scp:openid",
           "scp:profile",
           "scp:email",
+          "scp:offline_access",
         ],
         redirect_uris: ["http://localhost:4000/callback"],
         post_logout_redirect_uris: ["http://localhost:4000"],
@@ -104,6 +105,7 @@ const seedData = async () => {
           "scp:openid",
           "scp:profile",
           "scp:email",
+          "scp:offline_access",
         ],
         redirect_uris: ["http://localhost:3001/cb"],
         post_logout_redirect_uris: ["http://localhost:3001"],
@@ -124,7 +126,15 @@ const seedData = async () => {
         await appRepository.save(app);
         console.log(`  ✓ Created application: ${appData.client_id}`);
       } else {
-        console.log(`  ⊘ Application already exists: ${appData.client_id}`);
+        // Update existing application with new permissions
+        existing.permissions = appData.permissions;
+        existing.redirect_uris = appData.redirect_uris;
+        existing.post_logout_redirect_uris = appData.post_logout_redirect_uris;
+        existing.requirements = appData.requirements ?? [];
+        existing.consent_type = appData.consent_type;
+        existing.concurrency_stamp = uuidv4();
+        await appRepository.save(existing);
+        console.log(`  ✓ Updated application: ${appData.client_id}`);
       }
     }
 

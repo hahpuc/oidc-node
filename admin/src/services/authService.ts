@@ -47,6 +47,8 @@ export class AuthService {
     });
 
     const authUrl = `${AUTH_CONFIG.authServiceUrl}/auth?${params.toString()}`;
+    console.log("🔐 Authorization URL scope:", AUTH_CONFIG.scopes);
+    console.log("🔗 Full auth URL:", authUrl);
     window.location.href = authUrl;
   }
 
