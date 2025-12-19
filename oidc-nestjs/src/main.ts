@@ -158,9 +158,28 @@ async function bootstrap() {
         enabled: true,
       },
       resourceIndicators: {
-        enabled: false, // Disable for now to allow userinfo endpoint access
+        // Disable for to allow userinfo endpoint access
         // When enabled, tokens with resource indicators cannot access userinfo
         // Only enable this if you need to issue tokens for specific APIs
+        enabled: false,
+        // enabled: true,
+        // defaultResource: (ctx) => {
+        //   // Return default resource for all token requests
+        //   return ctx.oidc.issuer;
+        // },
+        // getResourceServerInfo: (ctx, resourceIndicator) => {
+        //   // Return JWT format for all tokens
+        //   return {
+        //     scope: "openid profile email offline_access",
+        //     audience: resourceIndicator,
+        //     accessTokenTTL: 3600, // 1 hour
+        //     accessTokenFormat: "jwt",
+        //     jwt: {
+        //       sign: { alg: "RS256" },
+        //     },
+        //   };
+        // },
+        // useGrantedResource: () => true,
       },
     },
     // Configure refresh token issuance policy
@@ -253,28 +272,6 @@ async function bootstrap() {
     "http://localhost:3000"
   );
   const provider = new Provider(issuer, oidcConfig);
-
-  // Enable provider debug events
-  provider.on("authorization.error", (ctx, error) => {
-    console.error("🔴 Authorization error:", error);
-  });
-  provider.on("grant.error", (ctx, error) => {
-    console.error("🔴 Grant error:", error);
-  });
-  provider.on("userinfo.error", (ctx, error) => {
-    console.error("🔴 Userinfo error:", error);
-  });
-  provider.on("access_token.saved", () => {
-    console.log("💾 Access token saved");
-  });
-  provider.on("access_token.destroyed", () => {
-    console.log("🗑️ Access token destroyed");
-  });
-  provider.on("authorization.accepted", (ctx) => {
-    console.log("✅ Authorization accepted");
-    console.log("   Params scope:", ctx.oidc.params?.scope);
-    console.log("   Prompt details:", ctx.oidc.prompts);
-  });
 
   // Store provider in app locals for controllers
   app.use((req, res, next) => {
